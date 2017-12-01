@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html>
+   <head>
+      <script type="text/javascript">
+         var socket = null;
+         var isopen = false;
+
+         window.onload = connect;
+
+         function connect(){
+            var sockadr = document.getElementById("sockadr").value;
+            if(sockadr == null){
+                console.log("Enter websocket address to connect to");
+                isopen = false;
+                return;
+            }
+
+            socket = new WebSocket(sockadr);
+            socket.binaryType = "arraybuffer";
+
+            socket.onopen = function() {
+                console.log("Connected!");
+                isopen = true;
+            }
+
+            socket.onmessage = function(e) {
+               if (typeof e.data != "string") {
+                  console.log("ERROR - received binary data");
+               }
+
+               var output = e.data.substr(0, 40);
+               console.log("Received (first 40 chars):");
+               console.log(output);
+            }
+
+            socket.onclose = function(e) {
+               console.log("Connection closed.");
+               socket = null;
+               isopen = false;
+            }
+         }
+
+         function sendText() {
+            if (isopen) {
+               var text = document.getElementById("sockmessage").value
+               socket.send(text);
+               console.log("Text message sent.");
+            } else {
+               console.log("Connection not opened.")
+            }
+         };
+
+      </script>
+   </head>
+   <body>
+      <p><input type="text" id="sockadr" value="ws://127.0.0.1:9000"><button type="button" onclick="connect();">connect</button> </p>
+      <p><textarea rows="25" cols="100" id="sockmessage">
+Paste the string to be submitted to the server here...
+      </textarea></p>
+     <p><button onclick='sendText();'>Send Text Message</button></p>
+   <p>Open your browser's JavaScript console to see what's happening (hit F12).</p>
+   </body>
+</html>
