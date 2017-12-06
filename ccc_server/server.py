@@ -85,7 +85,7 @@ class SocketServerConnection(WebSocketServerProtocol):
                     not self.enclosing_session.is_cc_connected()):
                 self.enclosing_session = SessionStore.instance().add_connection(self, message)
             else:
-                response = self.enclosing_session.forward_message(self, message)
+                response = self.enclosing_session._forward_message(self, message)
                 if response is not None:
                     self.send_text(response)
         except Exception as ex:
@@ -103,18 +103,19 @@ class SocketServerConnection(WebSocketServerProtocol):
         self.sendMessage(payload, isBinary=False)
 
     def close(self, reason_code):
-        self.log.info('code: {}'.format(reason_code))
+        self.enclosing_session = None
         reason_text = CCCSession.close_reasons[reason_code]
         self.sendClose(code=reason_code, reason=reason_text)
 
     def onClose(self, wasClean, code, reason):
-        #todo understand why there is no log output - the call to session.close is made....
-        self.log.info('code: {}, reason:{}'.format(code, reason))
         if code is None or code < 3000:
-            reason = CCCSession.close_reasons[CCCSession.CR_CHANNEL_CLOSE]
+            if reason is None:
+                reason = CCCSession.close_reasons[CCCSession.CR_CHANNEL_CLOSE]
             if self.enclosing_session is not None:
-                self.enclosing_session.close(CCCSession.CR_CHANNEL_CLOSE, self)
-        self.log.info("WebSocket connection to [{}] closed. Reason: {}".format(self.client_adr, ''))
+                self.enclosing_session.channel_closed(self)
+        else:
+            reason = CCCSession.close_reasons[code]
+        self.log.info("WebSocket connection to [{}] closed. Reason: {}".format(self.client_adr, reason))
 
 class CCCSession(object):
     """
@@ -128,7 +129,7 @@ class CCCSession(object):
     #Close reasons (CR) why the session closes
     CR_APP_EXCEPTION = 3000 #General exception causing the session to close
     CR_APP_PROTOCOLEXCEPTION = 3010 #Exception in the application server was raised due to client protocol violation
-    CR_CHANNEL_CLOSE = 3020 #The channel to either gis or app client was closed (externally) - causing the session to close
+    CR_CHANNEL_CLOSE = 1000 #The channel to either gis or app client was closed (externally) - causing the session to close
 
     close_reasons = {
         CR_APP_EXCEPTION: 'General unexpected ccc server exception',
@@ -161,9 +162,18 @@ class CCCSession(object):
         else:
             raise exception.CCCException('Client sent unkown method for initiating client - client connection')
 
-        self.first_connect = datetime.now()
+        if self.is_cc_connected():
+            self._emit_ready()
+        else:
+            self.first_connect = datetime.now()
 
-    def forward_message(self, source_con, message):
+    def _emit_ready(self):
+        """Sends the ready message to both clients"""
+        msg = 'ready'
+        self.appcon.send_text('ready')
+        self.giscon.send_text('ready')
+
+    def _forward_message(self, source_con, message):
         """Forwards the message from ist source connection to the destination connection"""
         destination_con = self._other_channel(source_con)
         destination_con.send_text(message)
@@ -179,26 +189,38 @@ class CCCSession(object):
         app_connected = self.appcon is not None
         return gis_connected and app_connected
 
-    def close(self, reason_code, channel=None):
+    def channel_closed(self, source_channel):
+        """
+        Called from a channel's onClose method if the channel is the source of the
+        close.
+        After notifying the other channel, removes the channels from the session
+        and the session from the session store.
+        """
+        other = self._other_channel(source_channel)
+        if other is not None:
+            self._close_channel(other, CCCSession.CR_CHANNEL_CLOSE)
+
+        self._destruct()
+
+    def _destruct(self):
+        """Removes the session from the store, removes the channels from the session"""
+        SessionStore.instance().remove_session(self)
+        self.giscon = None
+        self.appcon = None
+
+    def close(self, reason_code):
         """
         Closes the connections of this session and removes the session from the session store
-        If a channel is specified: It is the source of the session close and does not need to be closed (again)
         """
         reason = CCCSession.close_reasons[reason_code]
         self.log.info('Closing session due to reason: {}'.format(reason))
 
-        channels = None
-        if(channel is not None):
-            channels = [self._other_channel(channel)] #only the other channel needs to be closed
-        else:
-            channels = [self.giscon, self.appcon]
-
+        channels = [self.giscon, self.appcon]
         for channel in channels:
-            self._close_channel(channel, reason_code)
+            if channel is not None:
+                self._close_channel(channel, reason_code)
 
-        SessionStore.instance().remove_session(self)
-        self.giscon = None
-        self.appcon = None
+        self._destruct()
 
     def _other_channel(self, channel):
         """Returns the other channel. Example: If the gis channel is given as argument, the app channel is returned"""
@@ -227,8 +249,7 @@ class CCCSession(object):
     def _close_channel(self, channel, reason_code):
         """Tries to close the given channel. Logs an exception if closing was not possible"""
         try:
-            if channel is not None:
-                channel.close(reason_code)
+            channel.close(reason_code)
         except Exception as ex:
             reason_txt = CCCSession.close_reasons[reason_code]
             channel_name = self._channel_clienttype(channel)
