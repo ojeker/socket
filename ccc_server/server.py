@@ -5,7 +5,6 @@ The CCC-Session allows for the clients to talk to each other in both directions
 """
 from datetime import datetime
 from uuid import UUID
-import logging
 
 from autobahn.asyncio.websocket import WebSocketServerProtocol
 
@@ -18,6 +17,7 @@ class SessionStore(object):
 
     @staticmethod
     def instance():
+        """Creates the singleton instance if it does not yet exist and returns it"""
         if SessionStore.__instance is None:
             SessionStore.__instance = SessionStore()
 
@@ -49,6 +49,7 @@ class SessionStore(object):
         return session
 
     def remove_session(self, session):
+        """Removes this session from the running server"""
         if session.session_id in self.session_dict:
             del self.session_dict[session.session_id]
             self.log.info('Removed session [{}] from store'.format(session.session_id))
@@ -63,14 +64,17 @@ class SocketServerConnection(WebSocketServerProtocol):
         self.client_adr = None
         self.log = logutil.get_logger(self)
 
-    def onConnect(self, request):
-        self.client_adr  = request.peer
+    def onConnect(self, request): # pylint: disable=C0103
+        """Callback. Signature ist specified in autobahn.websocket.interfaces.IWebSocketChannel"""
+        self.client_adr = request.peer
         self.log.info("Client connecting: {0}".format(self.client_adr))
 
-    def onOpen(self):
+    def onOpen(self): # pylint: disable=C0103
+        """Callback. Signature ist specified in autobahn.websocket.interfaces.IWebSocketChannel"""
         pass
 
-    def onMessage(self, payload, isBinary):
+    def onMessage(self, payload, isBinary): # pylint: disable=C0103
+        """Callback. Signature ist specified in autobahn.websocket.interfaces.IWebSocketChannel"""
         try:
             if isBinary:
                 raise exception.CCCException("Received binary data - should only be text")
@@ -85,29 +89,32 @@ class SocketServerConnection(WebSocketServerProtocol):
                     not self.enclosing_session.is_cc_connected()):
                 self.enclosing_session = SessionStore.instance().add_connection(self, message)
             else:
-                response = self.enclosing_session._forward_message(self, message)
+                response = self.enclosing_session.forward_message(self, message)
                 if response is not None:
                     self.send_text(response)
-        except Exception as ex:
+        except Exception as ex: # pylint: disable=W0703
             self.log.exception(ex)
 
-            closeReason = CCCSession.CR_APP_PROTOCOLEXCEPTION
+            close_reason = CCCSession.CR_APP_PROTOCOLEXCEPTION
             if not isinstance(ex, exception.CCCException):
-                closeReason = CCCSession.CR_APP_EXCEPTION
+                close_reason = CCCSession.CR_APP_EXCEPTION
 
             if self.enclosing_session is not None:
-                self.enclosing_session.close(closeReason, channel=self)
+                self.enclosing_session.close(close_reason, channel=self)
 
     def send_text(self, text):
+        """Callback. Signature ist specified in autobahn.websocket.interfaces.IWebSocketChannel"""
         payload = text.encode('utf8')
         self.sendMessage(payload, isBinary=False)
 
     def close(self, reason_code):
+        """Closes this websocket and sets references to the socket to None"""
         self.enclosing_session = None
         reason_text = CCCSession.close_reasons[reason_code]
         self.sendClose(code=reason_code, reason=reason_text)
 
-    def onClose(self, wasClean, code, reason):
+    def onClose(self, wasClean, code, reason): # pylint: disable=W0613, C0103
+        """Callback. Signature ist specified in autobahn.websocket.interfaces.IWebSocketChannel"""
         if code is None or code < 3000:
             if reason is None:
                 reason = CCCSession.close_reasons[CCCSession.CR_CHANNEL_CLOSE]
@@ -129,7 +136,7 @@ class CCCSession(object):
     #Close reasons (CR) why the session closes
     CR_APP_EXCEPTION = 3000 #General exception causing the session to close
     CR_APP_PROTOCOLEXCEPTION = 3010 #Exception in the application server was raised due to client protocol violation
-    CR_CHANNEL_CLOSE = 1000 #The channel to either gis or app client was closed (externally) - causing the session to close
+    CR_CHANNEL_CLOSE = 1000 #The channel to either gis or app client was closed (externally)
 
     close_reasons = {
         CR_APP_EXCEPTION: 'General unexpected ccc server exception',
@@ -170,10 +177,10 @@ class CCCSession(object):
     def _emit_ready(self):
         """Sends the ready message to both clients"""
         msg = 'ready'
-        self.appcon.send_text('ready')
-        self.giscon.send_text('ready')
+        self.appcon.send_text(msg)
+        self.giscon.send_text(msg)
 
-    def _forward_message(self, source_con, message):
+    def forward_message(self, source_con, message):
         """Forwards the message from ist source connection to the destination connection"""
         destination_con = self._other_channel(source_con)
         destination_con.send_text(message)
@@ -250,8 +257,7 @@ class CCCSession(object):
         """Tries to close the given channel. Logs an exception if closing was not possible"""
         try:
             channel.close(reason_code)
-        except Exception as ex:
+        except Exception: # pylint: disable=W0703
             reason_txt = CCCSession.close_reasons[reason_code]
             channel_name = self._channel_clienttype(channel)
             self.log.exception('Error sending close to {}. Close reason: {}'.format(channel_name, reason_txt))
-
