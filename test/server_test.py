@@ -30,11 +30,18 @@ class TestSystem(unittest.TestCase):
         """
         server = None
         try:
+<<<<<<< HEAD
             #server = util.start_server()
 
             #clients = [client.GisClient, client.GisHijacker]
             #util.run_clients(clients)
             util.run_client(client.GisClient)
+=======
+            server = util.start_server()
+
+            clients = [client.GisClient, client.GisHijacker]
+            util.run_clients(clients)
+>>>>>>> ae99e5bc15851d3a7ac30ec33c6201b659749f28
         finally:
             util.stop_server(server)
 

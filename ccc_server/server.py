@@ -161,6 +161,7 @@ class CCCSession(object):
         schon verbunden oder nicht
         'fehlerhandling'
         """
+        add_ok = False
         self.log.info('Adding connection to existing session [{}] by method [{}]'.format(self.session_id, method))
 
 

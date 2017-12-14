@@ -30,7 +30,7 @@ class BaseClient(WebSocketClientProtocol):
             raise Exception('Binary message received [{}]'.format(repr(self)))
 
         text = payload.decode('utf8')
-        print('Message received. First 80 chars: {}... [{}]'.format(text[:80], repr(self)))
+        print('Message received. First 80 chars: {} ... [{}]'.format(text[:80], repr(self)))
 
         ltext = text.lower()
         if ltext.startswith('ready'):
