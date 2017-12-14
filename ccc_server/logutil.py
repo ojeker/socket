@@ -1,6 +1,6 @@
 """Contains helper classes and functions for logging"""
 import logging
-from ccc_server import config
+import config
 
 def get_logger(classinstance):
     """

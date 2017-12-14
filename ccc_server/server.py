@@ -41,10 +41,9 @@ class SessionStore(object):
         session = self.session_dict.get(session_id)
         if session is None:
             session = CCCSession(session_id)
-            session.add_connection(client_con, method)
             self.session_dict[session_id] = session
-        else:
-            session.add_connection(client_con, method)
+
+        session.add_connection(client_con, method)
 
         return session
 
@@ -82,9 +81,6 @@ class SocketServerConnection(WebSocketServerProtocol):
             message = payload.decode('utf8').strip()
             self.log.info('message received: ' + message)
 
-            #todo strikte Unterscheidung in "Handshake protokolls" und "CC-Protokolls" damit Handshake protokolls
-            #nur genau einmal verwendet werden können.
-
             if (self.enclosing_session is None or
                     not self.enclosing_session.is_cc_connected()):
                 self.enclosing_session = SessionStore.instance().add_connection(self, message)
@@ -92,6 +88,11 @@ class SocketServerConnection(WebSocketServerProtocol):
                 response = self.enclosing_session.forward_message(self, message)
                 if response is not None:
                     self.send_text(response)
+
+        except exception.Error504 as ex: # This client tried to connect to session with already established connection
+            self.log.exception(str(ex))
+            self.send_text(str(ex))
+            self.close(CCCSession.CR_APP_PROTOCOLEXCEPTION)
         except Exception as ex: # pylint: disable=W0703
             self.log.exception(ex)
 
@@ -154,20 +155,29 @@ class CCCSession(object):
     def add_connection(self, client_con, method):
         """
         Adds either a connection originating from the application or the gis client
+
+        Aspekte:
+        app oder gis
+        schon verbunden oder nicht
+        'fehlerhandling'
         """
+        add_ok = False
         self.log.info('Adding connection to existing session [{}] by method [{}]'.format(self.session_id, method))
+
+
         if method == 'appConnect':
             if self.appcon is None:
                 self.appcon = client_con
             else:
-                raise exception.CCCException('There is already an application connected for this session')
+                raise exception.Error504(self.session_id, 'app')
         elif method == 'gisConnect':
             if self.giscon is None:
                 self.giscon = client_con
+                add_ok = True
             else:
-                raise exception.CCCException('There is already a gis client connected for this session')
+                raise exception.Error504(self.session_id, 'gis')
         else:
-            raise exception.CCCException('Client sent unkown method for initiating client - client connection')
+            raise exception.Error503()
 
         if self.is_cc_connected():
             self._emit_ready()
