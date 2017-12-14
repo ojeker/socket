@@ -99,6 +99,5 @@ def run_clients(client_list):
 
 
 if __name__ == '__main__':
-    clients = [client.AppClient, client.GisClient]
-    run_clients(clients)
+    run_client(client.AppClient)
 
