@@ -5,8 +5,8 @@ import urllib.parse
 from autobahn.asyncio.websocket import WebSocketServerFactory
 
 import server
-from ccc_server import logutil
-from ccc_server import config
+import logutil
+import config
 
 def run_server(server_class):
     """Starts the server"""

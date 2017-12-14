@@ -5,7 +5,11 @@ import util
 
 class TestSystem(unittest.TestCase):
 
-    def test_handshake_ok(self):
+    def ttest_handshake_ok(self):
+        """
+        Test's the handshaking sequence by subsequently exchanging
+        a hello world message
+        """
         child = None
         try:
             child = util.start_server()
@@ -17,6 +21,22 @@ class TestSystem(unittest.TestCase):
                 clean_end = child.terminate(force=False)
                 if not clean_end:
                     child.terminate(force=True)
+
+    def test_no_session_takeover(self):
+        """
+        Asserts that a second call to either gisConnect or appConnect
+        in the same session fails (preventing session hijacking).
+        The calling client receives the corresponding error message.
+        """
+        server = None
+        try:
+            server = util.start_server()
+
+            clients = [client.GisClient, client.GisHijacker]
+            util.run_clients(clients)
+        finally:
+            util.stop_server(server)
+
 
 if __name__ == '__main__':
     unittest.main()

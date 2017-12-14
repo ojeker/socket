@@ -1,9 +1,9 @@
-#!/bin/sh
+#!/bin/bash
 
 CURDIR=$PWD
 
-#cd /Users/jeklin/Documents/python/venv/socket
 cd ../venv/socket
+
 #pwd
 source bin/activate socket
 cd $CURDIR

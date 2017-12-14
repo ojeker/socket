@@ -54,6 +54,17 @@ def start_server():
 
     return child
 
+def stop_server(serverhandle):
+    """
+    Stops the ccc_server using the given serverhandle.
+
+    The serverhandle is the returnvalue of pexpect.spawn(..)
+    """
+    if serverhandle is not None:
+        clean_end = serverhandle.terminate(force=False)
+        if not clean_end:
+            serverhandle.terminate(force=True)
+
 def run_client(client_class):
     """
     Runs the given client until the client himself calls close or an exception is thrown.
